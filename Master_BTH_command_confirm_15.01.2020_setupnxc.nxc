@@ -1,0 +1,280 @@
+//MASTER
+#define BT_CONN 1
+#define OUTBOX 5
+#define INBOX 1
+int min(int a, int b);
+int max(int a, int b);
+int command_confirm(int nr_command);
+void podnies (int moc, int odl=8);
+void opusc (int moc);
+void prawo();
+void lewo();
+bool jest_kontener();
+void otworz();
+void zamknij();
+bool lina();
+int odl();
+sub BTCheck(int conn);
+void setup();
+
+
+task main(){
+
+ setup();
+ 
+ podnies(100);
+ int i=0;
+
+while(true){
+
+podnies(100);
+lewo();
+
+//Suwnica bajer 2
+prawo();
+
+//Z lewej na prawa
+ for (int i=0; i<2; i++){
+  podnies(100);
+  lewo();
+  opusc(100);
+  command_confirm(4);
+  podnies(100);
+  prawo();
+  opusc(100);
+  command_confirm(3);
+ }
+
+//Suwnica bajer
+ podnies(100);
+ lewo();
+
+//Z prawej na lewa
+ for (int i=0; i<2; i++){
+  podnies(100);
+  prawo();
+  opusc(100);
+  command_confirm(4);
+  podnies(100);
+  lewo();
+  opusc(100);
+  command_confirm(3);
+ }
+}
+ 
+}
+
+//koniec main
+
+int min(int a, int b){
+   if(a<b) return a;
+   return b;
+}
+
+int max(int a, int b){
+   if(a>b) return a;
+   return b;
+}
+
+int command_confirm(int nr_command){
+   /*                                                         czy potwierdziæ?
+   0 - jedz na pozycje 0                                              tak
+   1 - jedz na pozycje 1                                              tak
+   2 - jedz na pozycje 2                                              tak
+   3 - otworz chwytak                                                tak
+   4 - zamknij chwytak                                                 tak
+   5 - zapytanie o odleglosc na czujniku ultradzwiekowym              nie - zwraca liczbe
+   6 - stop awaryjny                                                  tak
+   return int - 0 - nie wykonane, 1 - przyjeto komende, 2 - wykonane, ew. odleglosc na czujniku
+   */
+
+   ClearLine(LCD_LINE3);
+   NumOut(5,LCD_LINE3,nr_command);
+   TextOut(10,LCD_LINE5,"Slave response");
+
+   int ack = 0;
+   //wys³anie komendy:
+   until(ack==1) {
+      SendRemoteNumber(BT_CONN,OUTBOX,nr_command);
+      until(ReceiveRemoteNumber(INBOX,true,ack) == NO_ERR);
+   }
+   ClearLine(LCD_LINE7);
+   NumOut(5,LCD_LINE7,ack);
+
+   //oczekiwanie na wykonanie zadania:
+   ack=-1;
+   nr_command=nr_command+10;
+   ClearLine(LCD_LINE3);
+   NumOut(5,LCD_LINE3,nr_command);
+   if (nr_command!=15){  //5 to zapytanie o odleglosc
+      until(ack==2) {
+         SendRemoteNumber(BT_CONN,OUTBOX,nr_command);
+         until(ReceiveRemoteNumber(INBOX,true,ack) == NO_ERR);
+      }
+      ClearLine(LCD_LINE7);
+      NumOut(5,LCD_LINE7,ack);
+   } else {   // kiedy nr_command to zapytanie o odlegosæ
+      ack=-1;
+      until(ack>1) {
+         SendRemoteNumber(BT_CONN,OUTBOX,nr_command);
+         until(ReceiveRemoteNumber(INBOX,true,ack) == NO_ERR);
+      }
+      ClearLine(LCD_LINE7);
+      NumOut(5,LCD_LINE7,ack);
+      return (ack);
+   }
+}
+
+void podnies (int moc, int odl){
+   if (odl <8)
+      odl =8;
+   int check =0;
+   bool error = false;
+   while (command_confirm(5)>odl){
+      OnFwd(OUT_A, moc);
+      check++;
+      while (!lina() && check>2){
+            Off(OUT_ABC);
+            TextOut(5,LCD_LINE2,"Error");
+            PlayTone(333,300);
+            Wait(300);
+            PlayTone(0,300);
+            Wait(300);
+            error = true;
+      }
+      if (error){
+         for (int i =2; i<10; i++){
+         int t = max(min (i*i,300) ,10);
+         Wait(t);
+         PlayTone(787,300);
+         Wait(100+i*4);
+         PlayTone(0,300);
+         }
+         error = false;
+      }
+   }
+   Wait(300);
+   Off(OUT_A);
+}
+
+void opusc (int moc){
+   while (Sensor(IN_3)==0 && Sensor(IN_4)==0){
+      int t=0;
+      while (Sensor(IN_3)==0 && Sensor(IN_4)==0 ){
+         OnRev(OUT_A, moc);
+      }
+      Off(OUT_A);
+      while (Sensor(IN_1)==0 && (Sensor(IN_3)==1 || Sensor(IN_4)==1)){
+         t=t+1;
+         if(t%5==0){
+            int wysokosc=command_confirm(5);
+            podnies(100,max(wysokosc-4,8));
+         }
+         TextOut(5,LCD_LINE2,"Error");
+         PlayTone(300,300);
+         Wait(300);
+         PlayTone(0,300);
+         Wait(300);
+      }
+   }
+   ClearLine(LCD_LINE2);
+}
+
+
+
+void prawo(){
+   for (int i =0; i<90; i++){
+      OnFwd(OUT_BC, 100);
+      Wait(10);
+      Off(OUT_BC);
+      Wait(10);
+  }
+  Wait(500);
+}
+
+void lewo(){
+   OnRev(OUT_BC, 100);
+   while(Sensor(IN_2)==0){
+      OnRev(OUT_BC, 100);
+      Wait(10);
+      Off(OUT_BC);
+      Wait(10);
+   }
+   Off(OUT_BC);
+   for (int i =0; i<10; i++){
+      OnFwd(OUT_BC, 100);
+      Wait(10);
+      Off(OUT_BC);
+      Wait(10);
+   }
+   Off(OUT_BC);
+   Wait(500);
+}
+
+
+bool jest_kontener(){
+   if(Sensor(IN_1)==1)
+      return (true);
+   return (false);
+}
+void otworz(){
+  command_confirm (3);
+}
+void zamknij(){
+   command_confirm (4);
+}
+void setup(){
+
+   SetSensorTouch(IN_1);
+   SetSensorTouch(IN_2);
+   SetSensorTouch(IN_3);
+   SetSensorTouch(IN_4);
+   BTCheck(BT_CONN);
+   
+   for (int i =2; i<4; i++){
+       int t = max(min (i*i,300) ,10);
+       Wait(t);
+       PlayTone(999,300);
+       Wait(100+i*4);
+       PlayTone(0,300);
+       }
+   TextOut(10,LCD_LINE1,"Master sending");
+
+   bool is_contener = jest_kontener();
+   podnies(120, command_confirm(5)-2);
+   
+   do {
+      if (jest_kontener()){
+         podnies(120, 8);
+         lewo();
+         opusc(100);
+         command_confirm(5);
+         otworz();
+         podnies(120, command_confirm(5)-2);
+      }
+   } while (jest_kontener());
+   Off(OUT_ABC);
+}
+
+
+
+
+bool lina(){
+  if(Sensor(IN_3)==0 && Sensor(IN_4)==0)
+    return true;
+  return false;
+}
+int odl(){
+  return (command_confirm (5));
+}
+
+sub BTCheck(int conn){
+ while (!BluetoothStatus(conn)==NO_ERR){
+ TextOut(5,LCD_LINE2,"Error");
+ PlayTone(300,300);
+ Wait(300);
+ PlayTone(0,300);
+ Wait(300);
+ }
+}
+
